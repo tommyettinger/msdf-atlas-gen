@@ -931,7 +931,7 @@ int main(int argc, const char *const *argv) {
         config.imageFormat == ImageFormat::BINARY_FLOAT_BE
     );
     // TODO: In this case (if spacing is -1), the border pixels of each glyph are black, but still computed. For floating-point output, this may play a role.
-    int spacing = 1;// config.imageType == ImageType::MSDF || config.imageType == ImageType::MTSDF ? 0 : -1;
+    int spacing = config.imageType == ImageType::MSDF || config.imageType == ImageType::MTSDF ? 0 : -1;
     double uniformOriginX, uniformOriginY;
 
     // Load fonts
