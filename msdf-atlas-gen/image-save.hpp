@@ -19,7 +19,7 @@ template <int N>
 bool saveImageText(const msdfgen::BitmapConstRef<float, N> &bitmap, const char *filename, YDirection outputYDirection);
 
 template <int N>
-bool saveImage(const msdfgen::BitmapConstRef<byte, N> &bitmap, ImageFormat format, const char *filename, YDirection outputYDirection) {
+bool saveImage(const msdfgen::BitmapConstRef<byte, N> &bitmap, ImageFormat format, const char *filename, YDirection outputYDirection = YDirection::BOTTOM_UP) {
     switch (format) {
     #ifndef MSDFGEN_DISABLE_PNG
         case ImageFormat::PNG:
@@ -28,6 +28,10 @@ bool saveImage(const msdfgen::BitmapConstRef<byte, N> &bitmap, ImageFormat forma
         case ImageFormat::BMP:
             return msdfgen::saveBmp(bitmap, filename);
         case ImageFormat::TIFF:
+            return false;
+        case ImageFormat::RGBA:
+            return msdfgen::saveRgba(bitmap, filename);
+        case ImageFormat::FL32:
             return false;
         case ImageFormat::TEXT:
             return saveImageText(bitmap, filename, outputYDirection);
@@ -44,7 +48,7 @@ bool saveImage(const msdfgen::BitmapConstRef<byte, N> &bitmap, ImageFormat forma
 }
 
 template <int N>
-bool saveImage(const msdfgen::BitmapConstRef<float, N> &bitmap, ImageFormat format, const char *filename, YDirection outputYDirection) {
+bool saveImage(const msdfgen::BitmapConstRef<float, N> &bitmap, ImageFormat format, const char *filename, YDirection outputYDirection = YDirection::BOTTOM_UP) {
     switch (format) {
     #ifndef MSDFGEN_DISABLE_PNG
         case ImageFormat::PNG:
@@ -54,6 +58,10 @@ bool saveImage(const msdfgen::BitmapConstRef<float, N> &bitmap, ImageFormat form
             return msdfgen::saveBmp(bitmap, filename);
         case ImageFormat::TIFF:
             return msdfgen::saveTiff(bitmap, filename);
+        case ImageFormat::RGBA:
+            return msdfgen::saveRgba(bitmap, filename);
+        case ImageFormat::FL32:
+            return msdfgen::saveFl32(bitmap, filename);
         case ImageFormat::TEXT:
             return false;
         case ImageFormat::TEXT_FLOAT:

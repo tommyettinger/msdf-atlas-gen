@@ -2,7 +2,7 @@
 /*
 * MULTI-CHANNEL SIGNED DISTANCE FIELD ATLAS GENERATOR - standalone console program
 * --------------------------------------------------------------------------------
-* A utility by Viktor Chlumsky, (c) 2020 - 2024
+* A utility by Viktor Chlumsky, (c) 2020 - 2025
 */
 
 #ifdef MSDF_ATLAS_STANDALONE
@@ -69,6 +69,10 @@ R"(
       Specifies the input character set. Refer to the documentation for format of charset specification. Defaults to ASCII.
   -glyphset <filename>
       Specifies the set of input glyphs as glyph indices within the font file.
+  -chars <charset specification>
+      Specifies the input character set in-line. Refer to documentation for its syntax.
+  -glyphs <glyph set specification>
+      Specifies the set of glyph indices in-line. Refer to documentation for its syntax.
   -allglyphs
       Specifies that all glyphs within the font file are to be processed.
   -fontscale <scale>
@@ -83,9 +87,9 @@ ATLAS CONFIGURATION
       Selects the type of atlas to be generated.
 )"
 #ifndef MSDFGEN_DISABLE_PNG
-R"(  -format <png / bmp / tiff / text / textfloat / bin / binfloat / binfloatbe>)"
+R"(  -format <png / bmp / tiff / rgba / fl32 / text / textfloat / bin / binfloat / binfloatbe>)"
 #else
-R"(  -format <bmp / tiff / text / textfloat / bin / binfloat / binfloatbe>)"
+R"(  -format <bmp / tiff / rgba / fl32 / text / textfloat / bin / binfloat / binfloatbe>)"
 #endif
 R"(
       Selects the format for the atlas image output. Some image formats may be incompatible with embedded output formats.
@@ -290,6 +294,7 @@ struct FontInput {
     bool variableFont;
     GlyphIdentifierType glyphIdentifierType;
     const char *charsetFilename;
+    const char *charsetString;
     double fontScale;
     const char *fontName;
 };
@@ -448,6 +453,10 @@ int main(int argc, const char *const *argv) {
                 config.imageFormat = ImageFormat::BMP;
             else if (ARG_IS("tiff"))
                 config.imageFormat = ImageFormat::TIFF;
+            else if (ARG_IS("rgba"))
+                config.imageFormat = ImageFormat::RGBA;
+            else if (ARG_IS("fl32"))
+                config.imageFormat = ImageFormat::FL32;
             else if (ARG_IS("text"))
                 config.imageFormat = ImageFormat::TEXT;
             else if (ARG_IS("textfloat"))
@@ -460,9 +469,9 @@ int main(int argc, const char *const *argv) {
                 config.imageFormat = ImageFormat::BINARY_FLOAT_BE;
             else {
                 #ifndef MSDFGEN_DISABLE_PNG
-                    ABORT("Invalid image format. Valid formats are: png, bmp, tiff, text, textfloat, bin, binfloat");
+                    ABORT("Invalid image format. Valid formats are: png, bmp, tiff, rgba, fl32, text, textfloat, bin, binfloat");
                 #else
-                    ABORT("Invalid image format. Valid formats are: bmp, tiff, text, textfloat, bin, binfloat");
+                    ABORT("Invalid image format. Valid formats are: bmp, tiff, rgba, fl32, text, textfloat, bin, binfloat");
                 #endif
             }
             imageFormatName = arg;
@@ -483,16 +492,31 @@ int main(int argc, const char *const *argv) {
     #endif
         ARG_CASE("-charset", 1) {
             fontInput.charsetFilename = argv[argPos++];
+            fontInput.charsetString = nullptr;
             fontInput.glyphIdentifierType = GlyphIdentifierType::UNICODE_CODEPOINT;
             continue;
         }
         ARG_CASE("-glyphset", 1) {
             fontInput.charsetFilename = argv[argPos++];
+            fontInput.charsetString = nullptr;
+            fontInput.glyphIdentifierType = GlyphIdentifierType::GLYPH_INDEX;
+            continue;
+        }
+        ARG_CASE("-chars", 1) {
+            fontInput.charsetFilename = nullptr;
+            fontInput.charsetString = argv[argPos++];
+            fontInput.glyphIdentifierType = GlyphIdentifierType::UNICODE_CODEPOINT;
+            continue;
+        }
+        ARG_CASE("-glyphs", 1) {
+            fontInput.charsetFilename = nullptr;
+            fontInput.charsetString = argv[argPos++];
             fontInput.glyphIdentifierType = GlyphIdentifierType::GLYPH_INDEX;
             continue;
         }
         ARG_CASE("-allglyphs", 0) {
             fontInput.charsetFilename = nullptr;
+            fontInput.charsetString = nullptr;
             fontInput.glyphIdentifierType = GlyphIdentifierType::GLYPH_INDEX;
             continue;
         }
@@ -508,7 +532,7 @@ int main(int argc, const char *const *argv) {
             continue;
         }
         ARG_CASE("-and", 0) {
-            if (!fontInput.fontFilename && !fontInput.charsetFilename && fontInput.fontScale < 0)
+            if (!fontInput.fontFilename && !fontInput.charsetFilename && !fontInput.charsetString && fontInput.fontScale < 0)
                 ABORT("No font, character set, or font scale specified before -and separator.");
             if (!fontInputs.empty() && !memcmp(&fontInputs.back(), &fontInput, sizeof(FontInput)))
                 ABORT("No changes between subsequent inputs. A different font, character set, or font scale must be set inbetween -and separators.");
@@ -922,8 +946,9 @@ int main(int argc, const char *const *argv) {
     for (std::vector<FontInput>::reverse_iterator it = fontInputs.rbegin(); it != fontInputs.rend(); ++it) {
         if (!it->fontFilename && nextFontInput->fontFilename)
             it->fontFilename = nextFontInput->fontFilename;
-        if (!it->charsetFilename && nextFontInput->charsetFilename) {
+        if (!(it->charsetFilename || it->charsetString || it->glyphIdentifierType == GlyphIdentifierType::GLYPH_INDEX) && (nextFontInput->charsetFilename || nextFontInput->charsetString || nextFontInput->glyphIdentifierType == GlyphIdentifierType::GLYPH_INDEX)) {
             it->charsetFilename = nextFontInput->charsetFilename;
+            it->charsetString = nextFontInput->charsetString;
             it->glyphIdentifierType = nextFontInput->glyphIdentifierType;
         }
         if (it->fontScale < 0 && nextFontInput->fontScale >= 0)
@@ -979,7 +1004,9 @@ int main(int argc, const char *const *argv) {
                 fputs("Warning: You are using a version of this program without PNG image support!\n", stderr);
             #endif
         } else if (cmpExtension(config.imageFilename, ".bmp")) imageExtension = ImageFormat::BMP;
-        else if (cmpExtension(config.imageFilename, ".tif") || cmpExtension(config.imageFilename, ".tiff")) imageExtension = ImageFormat::TIFF;
+        else if (cmpExtension(config.imageFilename, ".tiff") || cmpExtension(config.imageFilename, ".tif")) imageExtension = ImageFormat::TIFF;
+        else if (cmpExtension(config.imageFilename, ".rgba")) imageExtension = ImageFormat::RGBA;
+        else if (cmpExtension(config.imageFilename, ".fl32")) imageExtension = ImageFormat::FL32;
         else if (cmpExtension(config.imageFilename, ".txt")) imageExtension = ImageFormat::TEXT;
         else if (cmpExtension(config.imageFilename, ".bin")) imageExtension = ImageFormat::BINARY;
     }
@@ -1031,6 +1058,7 @@ int main(int argc, const char *const *argv) {
     imageFormatName = nullptr; // No longer consistent with imageFormat
     bool floatingPointFormat = (
         config.imageFormat == ImageFormat::TIFF ||
+        config.imageFormat == ImageFormat::FL32 ||
         config.imageFormat == ImageFormat::TEXT_FLOAT ||
         config.imageFormat == ImageFormat::BINARY_FLOAT ||
         config.imageFormat == ImageFormat::BINARY_FLOAT_BE
@@ -1093,6 +1121,9 @@ int main(int argc, const char *const *argv) {
             if (fontInput.charsetFilename) {
                 if (!charset.load(fontInput.charsetFilename, fontInput.glyphIdentifierType != GlyphIdentifierType::UNICODE_CODEPOINT))
                     ABORT(fontInput.glyphIdentifierType == GlyphIdentifierType::GLYPH_INDEX ? "Failed to load glyph set specification." : "Failed to load character set specification.");
+            } else if (fontInput.charsetString) {
+                if (!charset.parse(fontInput.charsetString, strlen(fontInput.charsetString), fontInput.glyphIdentifierType != GlyphIdentifierType::UNICODE_CODEPOINT))
+                    ABORT(fontInput.glyphIdentifierType == GlyphIdentifierType::GLYPH_INDEX ? "Failed to parse glyph set specification." : "Failed to parse character set specification.");
             } else if (fontInput.glyphIdentifierType == GlyphIdentifierType::GLYPH_INDEX)
                 msdfgen::getGlyphCount(allGlyphCount, font);
             else
@@ -1404,7 +1435,7 @@ int main(int argc, const char *const *argv) {
             }
         } else {
             result = 1;
-            fputs("Shadron preview not supported in -glyphset mode.\n", stderr);
+            fputs("Shadron preview not supported in glyph set mode.\n", stderr);
         }
     }
 
