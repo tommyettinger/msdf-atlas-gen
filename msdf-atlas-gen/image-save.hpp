@@ -61,7 +61,7 @@ bool saveImage(const msdfgen::BitmapConstRef<float, N> &bitmap, ImageFormat form
         case ImageFormat::RGBA:
             return msdfgen::saveRgba(bitmap, filename);
         case ImageFormat::FL32:
-            return msdfgen::saveFl32(bitmap, filename);
+            return msdfgen::saveFl32(msdfgen::BitmapConstSection<float, N>(bitmap), filename);
         case ImageFormat::TEXT:
             return false;
         case ImageFormat::TEXT_FLOAT:
